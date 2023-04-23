@@ -124,13 +124,6 @@ void Window::timerEvent(QTimerEvent *)
   int grabHeight = settings.value("grab/height", 16).toInt();
   double scaleDivider = settings.value("viewport/divider", 1.0).toDouble();
 
-  /*
-  QPixmap viewportGrab = QGuiApplication::screenAt(QPoint(0, 0))->grabWindow(0,
-                                                                             pos.x() - ((viewportWidth * scaleDivider) / 2.0),
-                                                                             pos.y() - ((viewportHeight * scaleDivider) / 2.0),
-                                                                             viewportWidth * scaleDivider,
-                                                                             viewportHeight * scaleDivider);
-  */
   QPixmap viewportGrab = QGuiApplication::screenAt(QPoint(0, 0))->grabWindow(0,
                                                                              (pos.x() - (mouseSnap?pos.x() % (int)scaleDivider:0)) - ((viewportWidth * scaleDivider) / 2.0),
                                                                              (pos.y() - (mouseSnap?pos.y() % (int)scaleDivider:0)) - ((viewportHeight * scaleDivider) / 2.0),
@@ -140,7 +133,7 @@ void Window::timerEvent(QTimerEvent *)
   backBufferPixmap.push_back(viewportGrab);
   backBufferMouse.push_back(pos);
   int backBufferLength = settings.value("grab/backBuffer", 5).toInt();
-  if(backBufferPixmap.length() > backBufferLength) {
+  while(backBufferPixmap.length() > backBufferLength) {
     backBufferPixmap.pop_front();
     backBufferMouse.pop_front();
   }
@@ -149,7 +142,7 @@ void Window::timerEvent(QTimerEvent *)
   painter.drawRect((viewportWidth / 2) - (grabWidth / 2) - 1, (viewportHeight / 2) - (grabHeight / 2) - 1, grabWidth + 1, grabHeight + 1);
   painter.end();
   
-  viewport->setPixmap(viewportGrab.scaledToHeight(viewportGrab.height() * 4)); // 0 (entire screen), x, y, w, h
+  viewport->setPixmap(viewportGrab.scaledToHeight(viewportGrab.height() * 4));
 
   if(recording &&
      backBufferPixmap.length() >= backBufferLength) {
