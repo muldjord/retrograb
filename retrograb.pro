@@ -1,5 +1,5 @@
 TEMPLATE = app
-TARGET = Mouzoom
+TARGET = RetroGrab
 DEPENDPATH += .
 INCLUDEPATH += .
 CONFIG += release
