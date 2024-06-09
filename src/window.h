@@ -50,26 +50,27 @@ public slots:
 protected:
   void timerEvent(QTimerEvent *event);
   void keyPressEvent(QKeyEvent *event);
+  void keyReleaseEvent(QKeyEvent *event);
 
 private slots:
   void initRecording();
   void startRecording();
   void exportFrames();
   void setFps(int fps);
-  void resetFrameIdx(int);
-  
+  void clearFrames();
+
 private:
   QSettings &settings;
   bool recording = false;
+  bool shiftRecording = false;
   QTimer delayTimer;
   QLabel *viewport = nullptr;
   QLabel *grabbed = nullptr;
   QLabel *mouseSnapLabel = nullptr;
   QLabel *lockXLabel = nullptr;
   QLabel *lockYLabel = nullptr;
+  QLabel *frameStatusLabel = nullptr;
   QPushButton *recordButton = nullptr;
-  Slider *firstFrameSlider = nullptr;
-  Slider *lastFrameSlider = nullptr;
   QBasicTimer grabTimer;
   int frameIdx = 0;
   QList<QPixmap> frames;

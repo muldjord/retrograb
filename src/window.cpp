@@ -35,8 +35,8 @@ Window::Window(QSettings &settings)
   : settings(settings)
 {
   setWindowTitle("RetroGrab v" VERSION);
-  setMinimumWidth(1000);
-  setMinimumHeight(1200);
+  setMinimumWidth(1300);
+  setMinimumHeight(600);
   if(settings.contains("main/windowState")) {
     restoreGeometry(settings.value("main/windowState", "").toByteArray());
   }
@@ -46,28 +46,32 @@ Window::Window(QSettings &settings)
 
   grabbed = new QLabel();
   grabbed->setStyleSheet("background-color: #000000;");
+  frameStatusLabel = new QLabel(QString::number(frameIdx) + " / " + QString::number(frames.count()));
 
   recordButton = new QPushButton("Start Recording");
   connect(recordButton, &QPushButton::clicked, this, &Window::initRecording);
+  QPushButton *clearButton = new QPushButton("Clear all frames");
+  connect(clearButton, &QPushButton::clicked, this, &Window::clearFrames);
   QPushButton *exportButton = new QPushButton("Export");
   connect(exportButton, &QPushButton::clicked, this, &Window::exportFrames);
 
   Slider *viewportWidthSlider = new Slider(settings, "viewport/width", "Viewport width:", 256, 128);
   Slider *viewportHeightSlider = new Slider(settings, "viewport/height", "Viewport height:", 256, 128);
+
   Slider *viewportDividerSlider = new Slider(settings, "viewport/divider", "Viewport scale:", 32, 1);
+
+  Slider *snapAlignmentXSlider = new Slider(settings, "viewport/snapAlignmentX", "Snap alignment X:", 16, 1);
+  Slider *snapAlignmentYSlider = new Slider(settings, "viewport/snapAlignmentY", "Snap alignment Y:", 16, 1);
 
   Slider *grabWidthSlider = new Slider(settings, "grab/width", "Grab width:", 64, 16);
   Slider *grabHeightSlider = new Slider(settings, "grab/height", "Grab width:", 64, 16);
-
-  firstFrameSlider = new Slider(settings, "", "[->", 0, 0, false);
-  connect(firstFrameSlider, &Slider::valueChanged, this, &Window::resetFrameIdx);
-  lastFrameSlider = new Slider(settings, "", "<-]", 0, 0, false);
-  connect(lastFrameSlider, &Slider::valueChanged, this, &Window::resetFrameIdx);
 
   Slider *fpsSlider = new Slider(settings, "viewport/fps", "FPS (frames per second):", 60, 30);
   connect(fpsSlider, &Slider::valueChanged, this, &Window::setFps);
 
   Slider *backBufferSlider = new Slider(settings, "grab/backBuffer", "Grab look-ahead (number of frames):", 20, 5);
+
+  Slider *recordDelaySlider = new Slider(settings, "grab/delay", "Recording delay:", 20, 5);
 
   QHBoxLayout *labelLayout = new QHBoxLayout();
   mouseSnapLabel = new QLabel("Mouse pixel snap (ctrl+alt+s): " + QString(mouseSnap?"true":"false"));
@@ -77,25 +81,36 @@ Window::Window(QSettings &settings)
   labelLayout->addWidget(lockXLabel);
   labelLayout->addWidget(lockYLabel);
 
-  QVBoxLayout *layout = new QVBoxLayout();
-  //layout->setContentsMargins(0, 0, 0, 0);
-  layout->addWidget(viewport, 0, Qt::AlignTop | Qt::AlignCenter);
-  layout->addWidget(grabbed, 0, Qt::AlignTop | Qt::AlignCenter);
-  layout->addStretch(500);
-  layout->addWidget(viewportWidthSlider);
-  layout->addWidget(viewportHeightSlider);
-  layout->addWidget(viewportDividerSlider);
-  layout->addWidget(fpsSlider);
-  layout->addWidget(backBufferSlider);
-  layout->addWidget(grabWidthSlider);
-  layout->addWidget(grabHeightSlider);
-  layout->addWidget(firstFrameSlider);
-  layout->addWidget(lastFrameSlider);
-  layout->addLayout(labelLayout);
-  layout->addWidget(recordButton);
-  layout->addWidget(exportButton);
+  QHBoxLayout *buttonLayout = new QHBoxLayout();
+  buttonLayout->addWidget(recordButton);
+  buttonLayout->addWidget(clearButton);
+  buttonLayout->addWidget(exportButton);
 
-  delayTimer.setInterval(5000);
+  QVBoxLayout *leftLayout = new QVBoxLayout();
+  leftLayout->addWidget(viewport, 0, Qt::AlignTop | Qt::AlignCenter);
+  leftLayout->addWidget(grabbed, 0, Qt::AlignTop | Qt::AlignCenter);
+  leftLayout->addWidget(frameStatusLabel, 0, Qt::AlignTop | Qt::AlignCenter);
+  leftLayout->addStretch(500);
+  
+  QVBoxLayout *rightLayout = new QVBoxLayout();
+  rightLayout->addWidget(viewportWidthSlider);
+  rightLayout->addWidget(viewportHeightSlider);
+  rightLayout->addWidget(viewportDividerSlider);
+  rightLayout->addWidget(snapAlignmentXSlider);
+  rightLayout->addWidget(snapAlignmentYSlider);
+  rightLayout->addWidget(fpsSlider);
+  rightLayout->addWidget(backBufferSlider);
+  rightLayout->addWidget(grabWidthSlider);
+  rightLayout->addWidget(grabHeightSlider);
+  rightLayout->addWidget(recordDelaySlider);
+  rightLayout->addLayout(labelLayout);
+  rightLayout->addLayout(buttonLayout);
+
+  QHBoxLayout *layout = new QHBoxLayout();
+  layout->addLayout(leftLayout);
+  layout->addLayout(rightLayout);
+
+  
   delayTimer.setSingleShot(true);
   connect(&delayTimer, &QTimer::timeout, this, &Window::startRecording);
   
@@ -123,10 +138,12 @@ void Window::timerEvent(QTimerEvent *)
   int grabWidth = settings.value("grab/width", 16).toInt();
   int grabHeight = settings.value("grab/height", 16).toInt();
   double scaleDivider = settings.value("viewport/divider", 1.0).toDouble();
-
+  int snapAlignmentX = settings.value("viewport/snapAlignmentX", 1).toInt();
+  int snapAlignmentY = settings.value("viewport/snapAlignmentY", 1).toInt();
+  
   QPixmap viewportGrab = QGuiApplication::screenAt(QPoint(0, 0))->grabWindow(0,
-                                                                             (pos.x() - (mouseSnap?pos.x() % (int)scaleDivider:0)) - ((viewportWidth * scaleDivider) / 2.0),
-                                                                             (pos.y() - (mouseSnap?pos.y() % (int)scaleDivider:0)) - ((viewportHeight * scaleDivider) / 2.0),
+                                                                             snapAlignmentX + (pos.x() - (mouseSnap?pos.x() % (int)scaleDivider:0)) - ((viewportWidth * scaleDivider) / 2.0),
+                                                                             snapAlignmentY + (pos.y() - (mouseSnap?pos.y() % (int)scaleDivider:0)) - ((viewportHeight * scaleDivider) / 2.0),
                                                                              viewportWidth * scaleDivider,
                                                                              viewportHeight * scaleDivider);
   viewportGrab = viewportGrab.scaledToWidth(viewportWidth);
@@ -144,7 +161,7 @@ void Window::timerEvent(QTimerEvent *)
   
   viewport->setPixmap(viewportGrab.scaledToHeight(viewportGrab.height() * 4));
 
-  if(recording &&
+  if((recording || shiftRecording) &&
      backBufferPixmap.length() >= backBufferLength) {
     QPixmap grab = backBufferPixmap.first().copy(((viewportWidth / 2) - (grabWidth / 2)) + ((pos.x() - backBufferMouse.first().x()) / scaleDivider),
                                                  ((viewportHeight / 2) - (grabHeight / 2)) + ((pos.y() - backBufferMouse.first().y()) / scaleDivider),
@@ -155,14 +172,14 @@ void Window::timerEvent(QTimerEvent *)
       frames.append(grab);
     }
   }
-  
+
   if(!frames.isEmpty()) {
-    if(frameIdx > frames.count() ||
-       frameIdx > lastFrameSlider->getValue()) {
-      frameIdx = firstFrameSlider->getValue();
+    if(frameIdx > frames.count()) {
+      frameIdx = 0;
     }
     if(frameIdx < frames.count()) {
       grabbed->setPixmap(frames.at(frameIdx).scaledToHeight(frames.at(frameIdx).height() * 4));
+      frameStatusLabel->setText(QString::number(frameIdx) + " / " + QString::number(frames.count()));
     }
     frameIdx++;
   }
@@ -170,18 +187,14 @@ void Window::timerEvent(QTimerEvent *)
 
 void Window::initRecording()
 {
-  if(recording) {
+  if(!recording) {
+    recordButton->setText("Waiting...");
+    delayTimer.setInterval(settings.value("grab/delay", 5).toInt() * 1000);
+    delayTimer.start();
+  } else {
     recording = false;
     delayTimer.stop();
-    firstFrameSlider->setMaximum(frames.count());
-    firstFrameSlider->setValue(0);
-    lastFrameSlider->setMaximum(frames.count());
-    lastFrameSlider->setValue(frames.count());
     recordButton->setText("Start Recording");
-  } else {
-    recordButton->setText("Waiting...");
-    frames.clear();
-    delayTimer.start();
   }
 }
 
@@ -193,9 +206,9 @@ void Window::startRecording()
 
 void Window::exportFrames()
 {
-  QString exportPath = settings.value("export/path", "./export").toString();
-  if(!QFileInfo::exists(exportPath)) {
-    if(!QDir::current().mkpath(exportPath)) {
+  QDir exportDir(settings.value("export/path", "./export").toString());
+  if(!exportDir.exists()) {
+    if(!exportDir.mkpath(exportDir.absolutePath())) {
       QMessageBox::information(this, tr("Cancelled"), tr("The export path could not be created. Export has been cancelled."));
       return;
     }
@@ -203,26 +216,30 @@ void Window::exportFrames()
   bool overwriteAsk = settings.value("export/overwriteAsk", true).toBool();
   int idx = 0;
   for(const auto &frame: frames) {
-    if(idx >= firstFrameSlider->getValue()) {
-      QString zeros = QString::number(idx);
-      while(zeros.length() < 6) {
-        zeros.prepend("0");
-      }
-      QString currentFrame = (exportPath.right(1) == "/"?exportPath:exportPath + "/") + "frame" + zeros + ".png";
-      if(QFileInfo::exists(currentFrame)) {
-        if(overwriteAsk &&
-           QMessageBox::question(this, tr("Overwrite?"), tr("The export already exists, do you want to overwrite it?"),
-                                 QMessageBox::Yes | QMessageBox::No) != QMessageBox::Yes) {
-          QMessageBox::information(this, tr("Cancelled"), tr("The export has been cancelled."));
-          break;
+    QString zeros = QString::number(idx);
+    while(zeros.length() < 6) {
+      zeros.prepend("0");
+    }
+    QString frameName = "frame";
+    QString currentFrame = exportDir.absolutePath() + "/" + frameName + zeros + ".png";
+    if(QFileInfo::exists(currentFrame)) {
+      if(overwriteAsk &&
+         QMessageBox::question(this, tr("Overwrite?"),
+                               tr("An export already exists. Do you want to overwrite it (the existing one will be removed)?"),
+                               QMessageBox::Yes | QMessageBox::No)
+         != QMessageBox::Yes) {
+        QMessageBox::information(this, tr("Cancelled"), tr("The export has been cancelled."));
+        break;
+      } else {
+        for(const auto &fileInfo: exportDir.entryInfoList(QDir::Files)) {
+          if(fileInfo.fileName().left(frameName.length()) == frameName && fileInfo.suffix() == "png") {
+            QFile::remove(fileInfo.absoluteFilePath());
+          }
         }
       }
-      overwriteAsk = false;
-      frame.save(currentFrame);
     }
-    if(idx >= lastFrameSlider->getValue()) {
-      break;
-    }
+    overwriteAsk = false;
+    frame.save(currentFrame);
     idx++;
   }
 }
@@ -232,13 +249,13 @@ void Window::setFps(int fps)
   grabTimer.start(1000 / fps, Qt::PreciseTimer, this);
 }
 
-void Window::resetFrameIdx(int)
-{
-  frameIdx = firstFrameSlider->getValue();
-}
-
 void Window::keyPressEvent(QKeyEvent *event)
 {
+  if(event->key() == Qt::Key_Shift &&
+     !event->isAutoRepeat()) {
+    shiftRecording = true;
+    printf("Started recording with shift...\n");
+  }
   if(event->key() == Qt::Key_S &&
      event->modifiers() == (Qt::ControlModifier | Qt::AltModifier)) {
     mouseSnap = !mouseSnap;
@@ -259,5 +276,24 @@ void Window::keyPressEvent(QKeyEvent *event)
     if(lockY) {
       lockPosY = QCursor::pos().y();
     }
+  }
+}
+
+void Window::keyReleaseEvent(QKeyEvent *event)
+{
+  if(event->key() == Qt::Key_Shift &&
+     !event->isAutoRepeat()) {
+    shiftRecording = false;
+    printf("Ended recording with shift...\n");
+  }
+}
+
+void Window::clearFrames()
+{
+  if(QMessageBox::question(this, tr("Clear all frames?"),
+                           tr("Are you sure you want to clear all grabbed frames?"),
+                           QMessageBox::Yes | QMessageBox::No) == QMessageBox::Yes) {
+    frames.clear();
+    frameStatusLabel->setText("0 / 0");
   }
 }
